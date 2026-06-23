@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>♟ Chess Arena — Checkers</title>
+<style>
+/* ---- shared tokens from chess.css ---- */
+:root {
+  --bg:#1F2937;--primary:#B58863;--primary-hover:#9A744F;
+  --accent:#22C55E;--text:#F9FAFB;--muted:#94A3B8;
+  --card:#273244;--danger:#ffffff;
+  --board-light:#EEEED2;--board-dark:#769656;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center}
+
+/* ---- pages ---- */
+.page{display:none;width:100%;min-height:100vh}
+.page.active{display:flex;align-items:center;justify-content:center;flex-direction:column}
+
+/* ---- topbar ---- */
+.topbar{position:fixed;top:0;left:0;right:0;background:rgba(31,41,55,.95);backdrop-filter:blur(12px);border-bottom:1px solid rgba(181,136,99,.15);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;z-index:100}
+.topbar-logo{font-size:20px;font-weight:800}
+.topbar-logo span{color:var(--primary)}
+
+/* ---- buttons ---- */
+.btn{padding:14px 20px;background:var(--primary);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;transition:background .2s,transform .1s,box-shadow .2s;letter-spacing:.3px;width:100%}
+.btn:hover{background:var(--primary-hover);box-shadow:0 4px 20px rgba(181,136,99,.4)}
+.btn:active{transform:scale(.99)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-outline{background:transparent;border:1.5px solid var(--primary);color:var(--primary)}
+.btn-outline:hover{background:rgba(181,136,99,.1);box-shadow:none}
+.btn-sm{width:auto;padding:8px 16px;font-size:13px}
+
+/* ---- mode grid ---- */
+.mode-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;width:100%;max-width:860px;padding:24px}
+.mode-card{background:var(--card);border-radius:16px;padding:32px 20px;cursor:pointer;border:1.5px solid rgba(181,136,99,.1);transition:all .2s;text-align:center}
+.mode-card:hover{border-color:var(--primary);transform:translateY(-2px);box-shadow:0 12px 40px rgba(0,0,0,.3)}
+.mode-card-icon{font-size:48px;margin-bottom:12px;display:block}
+.mode-card-title{font-size:18px;font-weight:800;margin-bottom:6px}
+.mode-card-desc{font-size:13px;color:var(--muted);line-height:1.5}
+
+/* ---- hint cards ---- */
+.hint-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;width:100%;max-width:700px;padding:24px}
+.hint-card{background:var(--card);border-radius:16px;padding:32px 20px;cursor:pointer;border:1.5px solid rgba(181,136,99,.1);transition:all .2s;text-align:center}
+.hint-card:hover{border-color:var(--primary);transform:translateY(-2px);box-shadow:0 12px 40px rgba(0,0,0,.3)}
+.hint-card-title{font-size:18px;font-weight:800;margin-bottom:8px}
+.hint-card-desc{font-size:13px;color:var(--muted);line-height:1.6}
+
+/* ---- game layout ---- */
+.board-page{flex-direction:column;justify-content:flex-start!important;padding-top:70px;padding-bottom:20px;min-height:100vh}
+.game-layout{display:flex;gap:24px;align-items:flex-start;width:100%;max-width:1000px;padding:20px}
+.board-wrap{flex-shrink:0;width:min(calc(100vw - 340px),640px)}
+#checkerboard{display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);width:100%;aspect-ratio:1/1;border-radius:12px;overflow:hidden;box-shadow:0 30px 60px rgba(0,0,0,.35)}
+
+.menu-card-checkers {
+    background: linear-gradient(135deg, var(--card) 60%, rgba(239,68,68,0.10));
+    border-color: rgba(239,68,68,0.25) !important;
+  }
+  .menu-card-checkers:hover {
+    border-color: #ffffff !important;
+    box-shadow: 0 12px 40px rgba(239,68,68,0.2);
+  }
+  .checkers-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: rgba(239,68,68,0.18);
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 20px;
+    letter-spacing: .5px;
+  }
+
+/* ---- squares ---- */
+.sq{width:100%;height:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;user-select:none}
+.sq.light{background:var(--board-light)}
+.sq.dark{background:var(--board-dark)}
+.sq.selected{background:#f6f669!important}
+.sq.valid-move{background:rgba(81, 255, 241, 0.587)!important}
+.sq.last-move{background:rgba(254,248,121,.7)!important}
+
+/* ---- pieces ---- */
+.piece{width:78%;height:78%;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;box-shadow:0 3px 8px rgba(0,0,0,.5);position:relative;transition:transform .12s}
+.piece.white-piece{background:radial-gradient(circle at 35% 35%,#fff 0%,#d4d4d4 70%,#aaa 100%);color:#555;border:2px solid #bbb}
+.piece.black-piece{background:radial-gradient(circle at 35% 35%,#6b6b6b 0%,#2d2d2d 70%,#111 100%);color:#eee;border:2px solid #555}
+.piece.king::after{content:'♛';position:absolute;font-size:14px;top:50%;left:50%;transform:translate(-50%,-54%);pointer-events:none}
+.piece.white-piece.king::after{color:#B58863}
+.piece.black-piece.king::after{color:#F59E0B}
+
+/* ---- sidebar ---- */
+.sidebar{flex:1;min-width:240px;max-width:300px;background:#312E2B;border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.info-card{background:var(--card);border-radius:12px;padding:14px;border:1px solid rgba(181,136,99,.1)}
+.info-card h4{font-size:11px;text-transform:uppercase;color:var(--muted);letter-spacing:.5px;margin-bottom:10px;font-weight:700}
+.status-bar{text-align:center;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:700;background:rgba(181,136,99,.1);color:var(--primary)}
+.player-row{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;margin-bottom:6px}
+.player-row.active{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3)}
+.avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;background:var(--primary)}
+.player-row-name{font-size:13px;font-weight:700}
+.player-row-rating{font-size:11px;color:var(--muted)}
+.captured-row{display:flex;flex-wrap:wrap;gap:4px;min-height:24px;font-size:15px}
+.bot-think{display:none;align-items:center;gap:8px;font-size:13px;color:var(--muted);padding:8px}
+.bot-think.active{display:flex}
+.think-dots span{animation:dot-pulse 1.4s infinite both;display:inline-block}
+.think-dots span:nth-child(2){animation-delay:.2s}
+.think-dots span:nth-child(3){animation-delay:.4s}
+@keyframes dot-pulse{0%,80%,100%{transform:scale(.8);opacity:.5}40%{transform:scale(1.2);opacity:1}}
+
+/* ---- modal ---- */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);align-items:center;justify-content:center;z-index:200;display:none}
+.modal-overlay.active{display:flex}
+.modal{background:var(--card);border-radius:16px;padding:32px;text-align:center;border:1px solid rgba(181,136,99,.3);box-shadow:0 25px 60px rgba(0,0,0,.6);max-width:420px;width:90%}
+.modal h3{font-size:22px;margin-bottom:8px}
+.modal p{color:var(--muted);font-size:14px;margin-bottom:24px}
+.modal-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.modal-btns .btn{width:auto;min-width:120px}
+
+/* ---- chat ---- */
+.chat-card{display:flex;flex-direction:column;min-height:220px}
+.chat-messages{flex:1;overflow-y:auto;min-height:140px;max-height:220px;padding:4px 0;margin-bottom:10px;scrollbar-width:thin}
+.chat-messages::-webkit-scrollbar{width:4px}
+.chat-messages::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:2px}
+.chat-msg{padding:5px 8px;border-radius:8px;margin-bottom:6px;font-size:13px;line-height:1.4;word-break:break-word}
+.chat-msg.me{background:rgba(181,136,99,.18);text-align:right}
+.chat-msg.them{background:rgba(255,255,255,.06)}
+.chat-msg.system{background:transparent;color:var(--muted);font-size:11px;text-align:center;font-style:italic}
+.chat-msg-name{font-size:10px;font-weight:700;color:var(--primary);margin-bottom:2px}
+.chat-input-row{display:flex;gap:6px;align-items:center}
+.chat-input-row input{flex:1;margin-bottom:0;padding:9px 12px;font-size:13px;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.1);border-radius:10px;color:var(--text);outline:none}
+.chat-input-row input:focus{border-color:var(--primary)}
+.chat-send-btn{padding:9px 14px;background:var(--primary);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+.chat-send-btn:hover{background:var(--primary-hover)}
+#room-number-display{font-size:13px;font-weight:800;color:var(--primary);background:rgba(181,136,99,.13);padding:4px 12px;border-radius:8px;border:1px solid rgba(181,136,99,.25);letter-spacing:3px;display:none}
+
+/* waiting overlay */
+#waiting-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9000;align-items:center;justify-content:center;display:none}
+#waiting-overlay.active{display:flex}
+.waiting-box{background:var(--card);border-radius:20px;padding:40px 48px;text-align:center;border:1px solid rgba(181,136,99,.2);box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.room-code-display{font-size:56px;font-weight:900;letter-spacing:10px;color:var(--primary);margin:16px 0;text-shadow:0 0 30px rgba(181,136,99,.4)}
+.copy-btn{background:rgba(181,136,99,.15);border:1px solid rgba(181,136,99,.3);color:var(--primary);padding:8px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;margin-top:8px;transition:background .2s}
+.copy-btn:hover{background:rgba(181,136,99,.25)}
+
+input{width:100%;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.1);border-radius:10px;color:var(--text);font-size:15px;padding:14px 16px;outline:none;transition:border-color .2s;margin-bottom:16px}
+input:focus{border-color:var(--primary)}
+input::placeholder{color:var(--muted)}
+.error-msg{color:var(--danger);font-size:13px;display:none;margin-bottom:8px}
+
+@media(max-width:760px){
+  .game-layout{flex-direction:column;align-items:center}
+  .board-wrap{width:min(94vw,500px)}
+  .sidebar{width:min(94vw,500px);max-width:none}
+  .mode-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ===== PAGE: MODE SELECT ===== -->
+<div class="page active" id="page-checkers-menu">
+  <div class="topbar">
+    <div class="topbar-logo">♟ Chess <span>Arena</span> — <span>Checkers</span></div>
+    <button class="btn btn-outline btn-sm" onclick="goBackToChess()">ย้อนกลับ</button>
+  </div>
+  <div style="padding-top:80px;text-align:center;padding-bottom:20px">
+    <div style="font-size:36px;margin-bottom:8px">♚</div>
+    <div style="font-size:28px;font-weight:800;margin-bottom:8px">Checkers — หมากฮอต</div>
+    <div style="color:var(--muted);font-size:14px;margin-bottom:32px">เลือกโหมดการเล่น</div>
+  </div>
+  <div class="mode-grid">
+    <div class="mode-card" onclick="startCheckersWhiteboard()">
+      <span class="mode-card-icon">♕</span>
+      <div class="mode-card-title">White Board</div>
+      <div class="mode-card-desc">Fighting</div>
+    </div>
+    <div class="mode-card" onclick="startCheckersAI()">
+      <span class="mode-card-icon">♕</span>
+      <div class="mode-card-title">AI</div>
+      <div class="mode-card-desc">Automation</div>
+    </div>
+    <div class="mode-card" onclick="showCheckersCustomMenu()">
+      <span class="mode-card-icon">♕</span>
+      <div class="mode-card-title">Custom</div>
+      <div class="mode-card-desc">Online</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PAGE: CUSTOM MENU ===== -->
+<div class="page" id="page-checkers-custom">
+  <div class="topbar">
+    <div class="topbar-logo">♟ <span>Checkers</span></div>
+    <button class="btn btn-outline btn-sm" onclick="showPage('page-checkers-menu')">ย้อนกลับ</button>
+  </div>
+  <div style="padding-top:80px;text-align:center;padding-bottom:24px">
+    <div style="font-size:28px;font-weight:800;margin-bottom:8px">Custom Game</div>
+    <div style="color:var(--muted);font-size:14px;margin-bottom:36px">เล่นกับเพื่อนออนไลน์ พร้อมแชทแบบ Realtime</div>
+  </div>
+  <div class="hint-grid" style="max-width:560px">
+    <div class="hint-card" onclick="checkersCustomBuild()">
+      <div class="hint-card-title">Build</div>
+      <div class="hint-card-desc">สร้างห้องใหม่ รับรหัสห้อง<br>แล้วแชร์ให้เพื่อน</div>
+    </div>
+    <div class="hint-card" onclick="showCheckersJoinPanel()">
+      <div class="hint-card-title">Join</div>
+      <div class="hint-card-desc">ใส่รหัสห้องของเพื่อน<br>เพื่อเข้าร่วมเกม</div>
+    </div>
+  </div>
+  <div id="checkers-join-panel" style="display:none;margin-top:24px;width:100%;max-width:400px;padding:0 24px">
+    <div class="info-card" style="border-radius:16px;padding:24px">
+      <h4 style="margin-bottom:16px;text-align:center;font-size:16px;color:var(--text)">ใส่รหัสห้อง</h4>
+      <input type="text" id="checkers-join-input" placeholder="X X X X" maxlength="4"
+        style="text-align:center;font-size:28px;font-weight:800;letter-spacing:8px"
+        oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+      <div id="checkers-join-error" class="error-msg">ไม่พบห้องนี้ หรือห้องเต็มแล้ว</div>
+      <button class="btn" onclick="checkersJoinRoom()">เข้าร่วม</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PAGE: GAME BOARD ===== -->
+<div class="page board-page" id="page-checkers-board">
+  <div class="topbar">
+    <div class="topbar-logo">♟ Chess <span>Arena</span> — <span>Checkers</span></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span id="room-number-display"></span>
+      <button class="btn btn-outline btn-sm" id="btn-checkers-back" onclick="showPage('page-checkers-menu')">ย้อนกลับ</button>
+    </div>
+  </div>
+  <div class="game-layout">
+    <div class="board-wrap">
+      <div id="checkerboard"></div>
+    </div>
+    <div class="sidebar">
+      <div class="info-card">
+        <h4>ผู้เล่น</h4>
+        <div class="player-row" id="row-black-c">
+          <div class="avatar" style="background:#374151">⬛</div>
+          <div>
+            <div class="player-row-name" id="black-name-c">ดำ</div>
+            <div class="player-row-rating" id="black-sub-c"></div>
+          </div>
+        </div>
+        <div class="player-row" id="row-red-c">
+          <div class="avatar" style="background:#B91C1C">🔴</div>
+          <div>
+            <div class="player-row-name" id="red-name-c">แดง</div>
+            <div class="player-row-rating" id="red-sub-c"></div>
+          </div>
+        </div>
+      </div>
+      <div class="info-card">
+        <div class="status-bar" id="status-bar-c">เริ่มเกม</div>
+        <div class="bot-think" id="bot-think-c">
+          <span>AI กำลังคิด</span>
+          <span class="think-dots"><span>.</span><span>.</span><span>.</span></span>
+        </div>
+      </div>
+      <div class="info-card">
+        <h4>หมากที่จับได้</h4>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px">◻️:</div>
+        <div class="captured-row" id="captured-red-c"></div>
+        <div style="font-size:11px;color:var(--muted);margin:8px 0 4px">⬛:</div>
+        <div class="captured-row" id="captured-black-c"></div>
+      </div>
+      <!-- chat card (custom mode only) -->
+      <div class="info-card chat-card" id="chat-card-c" style="display:none;flex-direction:column;flex:1">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <h4 style="margin:0">Chat</h4>
+          <span id="room-badge-c" style="font-size:11px;color:var(--primary);font-weight:700;background:rgba(181,136,99,.12);padding:3px 8px;border-radius:6px"></span>
+        </div>
+        <div class="chat-messages" id="chat-messages-c"></div>
+        <div class="chat-input-row">
+          <input type="text" id="chat-input-c" placeholder="พิมพ์ข้อความ..." maxlength="200" autocomplete="off">
+          <button class="chat-send-btn" onclick="cSendChat()">ส่ง</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Waiting Overlay -->
+<div id="waiting-overlay">
+  <div class="waiting-box">
+    <div style="font-size:20px;font-weight:800;margin-bottom:4px">รหัสห้องของคุณ</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:8px">แชร์รหัสนี้ให้เพื่อนกด Join</div>
+    <div class="room-code-display" id="waiting-room-code">----</div>
+    <button class="copy-btn" onclick="cCopyRoomCode()">คัดลอกรหัส</button>
+    <div style="margin-top:20px;color:var(--muted);font-size:13px">รอเพื่อนเข้าร่วม...</div>
+    <div style="width:32px;height:32px;border:3px solid rgba(181,136,99,.2);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite;margin:12px auto 0"></div>
+  </div>
+</div>
+
+<!-- Game Over Modal -->
+<div class="modal-overlay" id="gameover-modal-c">
+  <div class="modal">
+    <div id="gameover-icon-c" style="font-size:56px;margin-bottom:12px">🔴</div>
+    <h3 id="gameover-title-c">จบเกม</h3>
+    <p id="gameover-sub-c">-</p>
+    <div class="modal-btns">
+      <button class="btn" onclick="cPlayAgain()">เล่นอีกครั้ง</button>
+      <button class="btn btn-outline" onclick="showPage('page-checkers-menu')">เมนูหลัก</button>
+    </div>
+  </div>
+</div>
+
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+
+
+</body>
+<script>
+// ============================================================
+// SUPABASE CONFIG (same as chess)
+// ============================================================
+const SUPABASE_URL = 'https://cizczpyoilmeiplktmto.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpemN6cHlvaWxtZWlwbGt0bXRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMDYzNzYsImV4cCI6MjA5NzY4MjM3Nn0.1KoMqe_jMv_hFdUdr5vBlkpmwdqI8tVUVH4MSFurpDE';
+
+// ============================================================
+// UTILS
+// ============================================================
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+}
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+function sanitize(s) { return String(s).replace(/[<>"'`;&\\\/]/g,'').trim().slice(0,256); }
+
+function goBackToChess() {
+  // Try to go back to chess arena if embedded; otherwise just go home
+  if (window.opener) { window.close(); return; }
+  window.history.back();
+}
+
+// ============================================================
+// SOUND
+// ============================================================
+const Sound = {
+  ctx: null,
+  _init() { if(!this.ctx) this.ctx=new(window.AudioContext||window.webkitAudioContext)(); if(this.ctx.state==='suspended') this.ctx.resume(); },
+  _play(freq,type,dur,vol=0.2,freqEnd=null){ this._init(); const c=this.ctx,o=c.createOscillator(),g=c.createGain(); o.connect(g); g.connect(c.destination); o.type=type; o.frequency.setValueAtTime(freq,c.currentTime); if(freqEnd) o.frequency.exponentialRampToValueAtTime(freqEnd,c.currentTime+dur); g.gain.setValueAtTime(vol,c.currentTime); g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+dur); o.start(c.currentTime); o.stop(c.currentTime+dur); },
+  move(){ this._play(480,'sine',.08,.18); },
+  capture(){ this._play(300,'triangle',.05,.3); setTimeout(()=>this._play(180,'triangle',.12,.25,120),30); },
+  king(){ [523,784,1047].forEach((f,i)=>setTimeout(()=>this._play(f,'sine',.18,.2),i*80)); },
+  win(){ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>this._play(f,'sine',.25,.22),i*120)); },
+  lose(){ [440,370,311,277].forEach((f,i)=>setTimeout(()=>this._play(f,'triangle',.22,.20),i*130)); },
+};
+
+// ============================================================
+// CHECKERS ENGINE
+// ============================================================
+// Board: 64 cells. Only dark squares used (row+col odd).
+// Pieces: null = empty, {color:'red'|'black', king:bool}
+// Red moves "up" (toward row 0), Black moves "down" (toward row 7)
+// (from red/bottom perspective)
+
+class Checkers {
+  constructor() { this.reset(); }
+
+  reset() {
+    this.board = Array(64).fill(null);
+    // Black pieces: rows 0-2 on dark squares
+    for (let r=0; r<3; r++) for (let c=0; c<8; c++) {
+      if ((r+c)%2===1) this.board[r*8+c] = {color:'black', king:false};
+    }
+    // Red pieces: rows 5-7 on dark squares
+    for (let r=5; r<8; r++) for (let c=0; c<8; c++) {
+      if ((r+c)%2===1) this.board[r*8+c] = {color:'red', king:false};
+    }
+    this.turn = 'red'; // red goes first
+    this.selected = null;
+    this.validMoves = []; // [{from,to,captured:[]}]
+    this.capturedRed = 0;
+    this.capturedBlack = 0;
+    this.status = 'playing'; // 'playing'|'red_wins'|'black_wins'|'draw'
+    this.mustJump = false;
+    this.continuationPiece = null; // index of piece that must continue jumping
+    this._computeMoves();
+  }
+
+  row(i) { return Math.floor(i/8); }
+  col(i) { return i%8; }
+  idx(r,c) { return r*8+c; }
+
+  // Get all valid moves for current turn (enforcing mandatory captures)
+  _computeMoves() {
+    const jumps = this._getAllJumps(this.turn);
+    if (jumps.length > 0) {
+      this.mustJump = true;
+      // If continuation piece, filter to only that piece's jumps
+      if (this.continuationPiece !== null) {
+        this.validMoves = jumps.filter(m => m.from === this.continuationPiece);
+      } else {
+        this.validMoves = jumps;
+      }
+    } else {
+      this.mustJump = false;
+      this.continuationPiece = null;
+      this.validMoves = this._getAllSimpleMoves(this.turn);
+    }
+    if (this.validMoves.length === 0) {
+      this.status = this.turn === 'red' ? 'black_wins' : 'red_wins';
+    }
+  }
+
+  _dirs(piece) {
+    if (piece.king) return [[-1,-1],[-1,1],[1,-1],[1,1]];
+    return piece.color === 'red' ? [[-1,-1],[-1,1]] : [[1,-1],[1,1]];
+  }
+
+  _getAllSimpleMoves(color) {
+    const moves = [];
+    for (let i=0; i<64; i++) {
+      const p = this.board[i];
+      if (!p || p.color !== color) continue;
+      for (const [dr,dc] of this._dirs(p)) {
+        const nr=this.row(i)+dr, nc=this.col(i)+dc;
+        if (nr<0||nr>7||nc<0||nc>7) continue;
+        const ni = this.idx(nr,nc);
+        if (!this.board[ni]) moves.push({from:i, to:ni, captured:[]});
+      }
+    }
+    return moves;
+  }
+
+  _getAllJumps(color, board=null, piece_idx=null) {
+    const b = board || this.board;
+    const moves = [];
+    const indices = piece_idx !== null ? [piece_idx] : [...Array(64).keys()];
+    for (const i of indices) {
+      const p = b[i];
+      if (!p || p.color !== color) continue;
+      for (const [dr,dc] of this._dirs(p)) {
+        const mr=this.row(i)+dr, mc=this.col(i)+dc; // mid
+        const lr=this.row(i)+dr*2, lc=this.col(i)+dc*2; // land
+        if (lr<0||lr>7||lc<0||lc>7) continue;
+        const mi=this.idx(mr,mc), li=this.idx(lr,lc);
+        const mid=b[mi];
+        if (mid && mid.color !== color && !b[li]) {
+          moves.push({from:i, to:li, captured:[mi]});
+        }
+      }
+    }
+    return moves;
+  }
+
+  // Get moves for a specific piece (for UI highlighting)
+  getMovesFor(idx) {
+    return this.validMoves.filter(m => m.from === idx);
+  }
+
+  makeMove(from, to) {
+    const move = this.validMoves.find(m => m.from === from && m.to === to);
+    if (!move) return false;
+
+    const piece = {...this.board[from]};
+    this.board[from] = null;
+
+    // Remove captured piece
+    for (const ci of move.captured) this.board[ci] = null;
+    if (move.captured.length > 0) {
+      if (this.turn === 'red') this.capturedBlack += move.captured.length;
+      else this.capturedRed += move.captured.length;
+    }
+
+    // King promotion
+    const toRow = this.row(to);
+    if (!piece.king && ((piece.color==='red' && toRow===0) || (piece.color==='black' && toRow===7))) {
+      piece.king = true;
+      this.board[to] = piece;
+      Sound.king();
+      // After king promotion, cannot continue jumping
+      this.continuationPiece = null;
+      this._endTurn();
+      return true;
+    }
+
+    this.board[to] = piece;
+
+    // Check for multi-jump
+    if (move.captured.length > 0) {
+      const furtherJumps = this._getAllJumps(this.turn, this.board, to);
+      if (furtherJumps.length > 0) {
+        this.continuationPiece = to;
+        this.selected = to;
+        this._computeMoves();
+        return true;
+      }
+    }
+
+    this.continuationPiece = null;
+    this._endTurn();
+    return true;
+  }
+
+  _endTurn() {
+    this.turn = this.turn === 'red' ? 'black' : 'red';
+    this._computeMoves();
+  }
+}
+
+// ============================================================
+// BOT AI (minimax for checkers)
+// ============================================================
+const CheckersBot = {
+  evaluate(game) {
+    let score = 0;
+    for (let i=0; i<64; i++) {
+      const p = game.board[i];
+      if (!p) continue;
+      const val = p.king ? 300 : 100;
+      // positional: advance bonus
+      const row = game.row(i);
+      const advance = p.color==='red' ? (7-row) : row;
+      const pos = advance * 5;
+      if (p.color==='black') score -= (val+pos);
+      else score += (val+pos);
+    }
+    return score;
+  },
+
+  _clone(game) {
+    const g = new Checkers();
+    g.board = game.board.map(p => p ? {...p} : null);
+    g.turn = game.turn;
+    g.capturedRed = game.capturedRed;
+    g.capturedBlack = game.capturedBlack;
+    g.status = game.status;
+    g.continuationPiece = game.continuationPiece;
+    g._computeMoves();
+    return g;
+  },
+
+  minimax(game, depth, alpha, beta, maximizing) {
+    if (depth===0 || game.status!=='playing') {
+      if (game.status==='red_wins') return maximizing ? 99999 : -99999;
+      if (game.status==='black_wins') return maximizing ? -99999 : 99999;
+      return this.evaluate(game);
+    }
+    const moves = game.validMoves;
+    if (maximizing) {
+      let best = -Infinity;
+      for (const m of moves) {
+        const g2 = this._clone(game);
+        g2.makeMove(m.from, m.to);
+        const s = this.minimax(g2, depth-1, alpha, beta, g2.turn==='red');
+        best = Math.max(best, s); alpha = Math.max(alpha, s);
+        if (beta<=alpha) break;
+      }
+      return best;
+    } else {
+      let best = Infinity;
+      for (const m of moves) {
+        const g2 = this._clone(game);
+        g2.makeMove(m.from, m.to);
+        const s = this.minimax(g2, depth-1, alpha, beta, g2.turn==='red');
+        best = Math.min(best, s); beta = Math.min(beta, s);
+        if (beta<=alpha) break;
+      }
+      return best;
+    }
+  },
+
+  getBestMove(game) {
+    const moves = game.validMoves;
+    if (!moves.length) return null;
+    // Random 15% of the time
+    if (Math.random()<0.15) return moves[Math.floor(Math.random()*moves.length)];
+    let best=null, bestScore=-Infinity;
+    for (const m of moves) {
+      const g2 = this._clone(game);
+      g2.makeMove(m.from, m.to);
+      const s = this.minimax(g2, 4, -Infinity, Infinity, g2.turn==='red');
+      if (s>bestScore) { bestScore=s; best=m; }
+    }
+    return best || moves[0];
+  }
+};
+
+// ============================================================
+// APP STATE
+// ============================================================
+let CAPP = { mode: null }; // 'whiteboard'|'ai'|'custom'
+let cGame = null;
+
+// ============================================================
+// RENDER
+// ============================================================
+function cRender() {
+  const board = document.getElementById('checkerboard');
+  board.innerHTML = '';
+  // Flip board for custom black player
+  const flipped = (CAPP.mode==='custom' && CheckersOnline.myColor==='black');
+
+  for (let vi=0; vi<64; vi++) {
+    const i = flipped ? 63-vi : vi;
+    const r = Math.floor(i/8), c = i%8;
+    const sq = document.createElement('div');
+    sq.className = 'sq ' + ((r+c)%2===0 ? 'light' : 'dark');
+    sq.dataset.idx = i;
+
+    // Highlights
+    if (cGame.selected===i) sq.classList.add('selected');
+    const validDests = cGame.validMoves.filter(m=>m.from===cGame.selected).map(m=>m.to);
+    if (validDests.includes(i)) sq.classList.add('valid-move');
+
+    // Piece
+    const p = cGame.board[i];
+    if (p) {
+      const div = document.createElement('div');
+      div.className = 'piece ' + (p.color==='red' ? 'white-piece' : 'black-piece') + (p.king ? ' king' : '');
+      sq.appendChild(div);
+    }
+
+    // Only clickable dark squares
+    if ((r+c)%2===1) sq.addEventListener('click', ()=>cHandleClick(i));
+    board.appendChild(sq);
+  }
+  cUpdateSidebar();
+}
+
+function cUpdateSidebar() {
+  if (!cGame) return;
+  const st = document.getElementById('status-bar-c');
+  if (cGame.status==='playing') {
+    st.textContent = cGame.turn==='red' ? '◻️ White Turn' : '⬛ Black Turn';
+    st.style.color = cGame.turn==='red' ? '#EF4444' : '#94A3B8';
+  } else {
+    st.textContent = cGame.status==='red_wins' ? '◻️ White Wins!' : '⬛ Black Wins!';
+  }
+  document.getElementById('row-red-c').className = 'player-row'+(cGame.turn==='red'?' active':'');
+  document.getElementById('row-black-c').className = 'player-row'+(cGame.turn==='black'?' active':'');
+  document.getElementById('captured-red-c').textContent = '×'+cGame.capturedBlack;
+  document.getElementById('captured-black-c').textContent = '×'+cGame.capturedRed;
+}
+
+// ============================================================
+// CLICK HANDLER
+// ============================================================
+function cHandleClick(idx) {
+  if (!cGame || cGame.status!=='playing') return;
+  // AI mode: red player only
+  if (CAPP.mode==='ai' && cGame.turn==='black') return;
+  // Custom mode: only your color
+  if (CAPP.mode==='custom') {
+    const myColor = CheckersOnline.myColor;
+    if (myColor!==cGame.turn) return;
+  }
+
+  const p = cGame.board[idx];
+
+  if (cGame.selected !== null) {
+    // Try to move
+    const move = cGame.validMoves.find(m=>m.from===cGame.selected && m.to===idx);
+    if (move) {
+      const wasCapture = move.captured.length>0;
+      cGame.makeMove(cGame.selected, idx);
+      if (wasCapture) Sound.capture(); else Sound.move();
+      // Broadcast in custom mode
+      if (CAPP.mode==='custom') {
+        CheckersOnline.broadcast('move', {from: cGame.selected ?? move.from, to: idx});
+        // Note: selected already changed after makeMove
+      }
+      // Recheck selection for continuation
+      cRender();
+      cCheckGameOver();
+      if (CAPP.mode==='ai' && cGame.status==='playing' && cGame.turn==='black') {
+        setTimeout(cBotMove, 400+Math.random()*400);
+      }
+      return;
+    }
+    // Deselect
+    cGame.selected = null;
+  }
+
+  // Select a piece
+  if (p && p.color===cGame.turn) {
+    // Only allow selecting pieces that have valid moves
+    const hasMoves = cGame.validMoves.some(m=>m.from===idx);
+    if (hasMoves) {
+      cGame.selected = idx;
+    }
+  }
+  cRender();
+}
+
+function cBotMove() {
+  if (!cGame || cGame.turn!=='black') return;
+  document.getElementById('bot-think-c').classList.add('active');
+  setTimeout(()=>{
+    document.getElementById('bot-think-c').classList.remove('active');
+    const m = CheckersBot.getBestMove(cGame);
+    if (m) {
+      const wasCapture = m.captured.length>0;
+      cGame.makeMove(m.from, m.to);
+      if (wasCapture) Sound.capture(); else Sound.move();
+      cRender();
+      cCheckGameOver();
+      // Bot might continue jumping (continuationPiece set)
+      if (cGame.continuationPiece!==null && cGame.turn==='black') {
+        setTimeout(cBotMove, 500);
+      }
+    }
+  }, 150);
+}
+
+function cCheckGameOver() {
+  if (!cGame || cGame.status==='playing') return;
+  setTimeout(()=>cShowGameOver(), 300);
+}
+
+function cShowGameOver() {
+  const won = cGame.status==='red_wins';
+  document.getElementById('gameover-icon-c').textContent = won ? '🔴' : '⬛';
+  document.getElementById('gameover-title-c').textContent = won ? 'แดงชนะ! 🎉' : 'ดำชนะ! 🎉';
+  document.getElementById('gameover-sub-c').textContent = 'ขอบคุณสำหรับเกมดีๆ';
+  if (won) Sound.win(); else Sound.lose();
+  openModal('gameover-modal-c');
+}
+
+function cPlayAgain() {
+  closeModal('gameover-modal-c');
+  if (CAPP.mode) cInitGame(CAPP.mode);
+}
+
+// ============================================================
+// GAME START
+// ============================================================
+function cInitGame(mode) {
+  CAPP.mode = mode;
+  cGame = new Checkers();
+
+  document.getElementById('chat-card-c').style.display = 'none';
+  document.getElementById('room-number-display').style.display = 'none';
+  document.getElementById('bot-think-c').classList.remove('active');
+
+  if (mode==='whiteboard') {
+    document.getElementById('red-name-c').textContent = 'แดง (ผู้เล่น 1)';
+    document.getElementById('black-name-c').textContent = 'ดำ (ผู้เล่น 2)';
+    document.getElementById('red-sub-c').textContent = '';
+    document.getElementById('black-sub-c').textContent = '';
+  } else if (mode==='ai') {
+    document.getElementById('red-name-c').textContent = 'คุณ (แดง)';
+    document.getElementById('black-name-c').textContent = 'AI (ดำ)';
+    document.getElementById('red-sub-c').textContent = '';
+    document.getElementById('black-sub-c').textContent = 'คิดด้วย Minimax';
+  }
+
+  cRender();
+  showPage('page-checkers-board');
+}
+
+function startCheckersWhiteboard() { cInitGame('whiteboard'); }
+function startCheckersAI() { cInitGame('ai'); }
+
+function showCheckersCustomMenu() {
+  document.getElementById('checkers-join-panel').style.display='none';
+  document.getElementById('checkers-join-input').value='';
+  showPage('page-checkers-custom');
+}
+
+function showCheckersJoinPanel() {
+  const p = document.getElementById('checkers-join-panel');
+  p.style.display = p.style.display==='none'?'block':'none';
+  if (p.style.display!=='none') setTimeout(()=>document.getElementById('checkers-join-input').focus(),100);
+}
+
+// ============================================================
+// ONLINE CUSTOM MODE
+// ============================================================
+const CheckersOnline = {
+  _ws: null, _channelTopic: null, _active: false,
+  myColor: null, isBuilder: false, roomCode: null, opponentName: null,
+
+  generateCode() {
+    const arr = new Uint16Array(1); crypto.getRandomValues(arr);
+    return String(1000+(arr[0]%9000)).padStart(4,'0');
+  },
+
+  async build() {
+    const code = this.generateCode();
+    this.roomCode = code; this.myColor='red'; this.isBuilder=true;
+    document.getElementById('waiting-room-code').textContent = code;
+    document.getElementById('waiting-overlay').style.display='flex';
+    this._connect(code,'builder');
+  },
+
+  async join(code) {
+    this.roomCode=code; this.myColor='black'; this.isBuilder=false;
+    this._connect(code,'joiner');
+  },
+
+  _connect(code, role) {
+    if (this._ws) { try{this._ws.close()}catch(e){} }
+    const wsUrl = SUPABASE_URL.replace('https://','wss://')+'/realtime/v1/websocket?apikey='+SUPABASE_ANON_KEY+'&vsn=1.0.0';
+    const ws = new WebSocket(wsUrl);
+    this._ws = ws; this._active = true;
+    const topic = 'realtime:checkers-room-'+code;
+    this._channelTopic = topic;
+    const self = this;
+    ws.onopen = ()=>{
+      ws.send(JSON.stringify({topic,event:'phx_join',payload:{config:{broadcast:{self:false},presence:{key:'player'}}},ref:'1'}));
+    };
+    ws.onmessage = (evt)=>{
+      let msg; try{msg=JSON.parse(evt.data)}catch(e){return}
+      if (msg.event==='phx_reply'&&msg.ref==='1') {
+        if (role==='joiner') self._send('player_joined',{nickname:'Joiner',color:'black'});
+      }
+      if (msg.event==='broadcast'&&msg.payload?.type) self._handle(msg.payload.type,msg.payload.data||{});
+    };
+    ws.onclose=()=>{ if(self._active) self._sysMsg('การเชื่อมต่อขาดหาย'); };
+  },
+
+  _send(type,data) {
+    if(!this._ws||this._ws.readyState!==WebSocket.OPEN) return;
+    this._ws.send(JSON.stringify({topic:this._channelTopic,event:'broadcast',payload:{type,data},ref:String(Date.now())}));
+  },
+  broadcast(type,data){ this._send(type,data); },
+
+  _handle(type,data) {
+    if (type==='player_joined' && this.isBuilder) {
+      this.opponentName = data.nickname||'Player 2';
+      document.getElementById('waiting-overlay').style.display='none';
+      this._launchGame();
+      this._send('player_joined_ack',{nickname:'Builder',color:'red'});
+    }
+    if (type==='player_joined_ack' && !this.isBuilder) {
+      this.opponentName = data.nickname||'Player 1';
+      this._launchGame();
+    }
+    if (type==='move') this._onMove(data);
+    if (type==='chat') this._onChat(data);
+  },
+
+  _launchGame() {
+    CAPP.mode='custom';
+    cGame = new Checkers();
+    const myNick = this.myColor==='red'?'คุณ (แดง)':'คุณ (ดำ)';
+    const oppNick = this.myColor==='red'?'เพื่อน (ดำ)':'เพื่อน (แดง)';
+    document.getElementById('red-name-c').textContent = this.myColor==='red'?myNick:oppNick;
+    document.getElementById('black-name-c').textContent = this.myColor==='black'?myNick:oppNick;
+    document.getElementById('red-sub-c').textContent=''; document.getElementById('black-sub-c').textContent='';
+    document.getElementById('chat-card-c').style.display='flex';
+    document.getElementById('room-badge-c').textContent='ห้อง #'+this.roomCode;
+    const rd = document.getElementById('room-number-display');
+    rd.textContent='🔑 '+this.roomCode; rd.style.display='inline-block';
+    document.getElementById('chat-messages-c').innerHTML='';
+    this._sysMsg('🎮 เชื่อมต่อห้อง #'+this.roomCode+' สำเร็จ!');
+    this._sysMsg((this.myColor==='red'?'🔴 คุณเล่นเป็นฝ่ายแดง':'⬛ คุณเล่นเป็นฝ่ายดำ'));
+    cRender();
+    showPage('page-checkers-board');
+    document.getElementById('chat-input-c').addEventListener('keydown',(e)=>{if(e.key==='Enter')cSendChat();});
+  },
+
+  _onMove(data) {
+    if (!cGame) return;
+    const {from,to} = data;
+    if (typeof from==='number'&&typeof to==='number') {
+      const wasCapture = cGame.validMoves.find(m=>m.from===from&&m.to===to)?.captured?.length>0;
+      cGame.makeMove(from,to);
+      if (wasCapture) Sound.capture(); else Sound.move();
+      cRender();
+      cCheckGameOver();
+    }
+  },
+
+  _onChat(data) {
+    this._addMsg(sanitize(data.nickname||'Opponent'), sanitize(data.message||''), 'them');
+  },
+
+  sendChat(msg) {
+    const clean = sanitize(msg).slice(0,200);
+    if (!clean) return;
+    this._addMsg('คุณ', clean, 'me');
+    this._send('chat',{nickname:'ผู้เล่น',message:clean});
+  },
+
+  _addMsg(name,text,type) {
+    const c=document.getElementById('chat-messages-c'); if(!c) return;
+    const d=document.createElement('div'); d.className='chat-msg '+type;
+    if(type!=='system'){const n=document.createElement('div');n.className='chat-msg-name';n.textContent=name;d.appendChild(n);}
+    const t=document.createElement('div');t.textContent=text;d.appendChild(t);
+    c.appendChild(d);c.scrollTop=c.scrollHeight;
+  },
+  _sysMsg(text){ this._addMsg('','  '+text,'system'); },
+
+  cleanup() {
+    this._active=false;
+    if(this._ws){try{this._ws.close()}catch(e){}; this._ws=null;}
+    document.getElementById('chat-card-c').style.display='none';
+    document.getElementById('room-number-display').style.display='none';
+  }
+};
+
+async function checkersCustomBuild() { await CheckersOnline.build(); }
+
+async function checkersJoinRoom() {
+  const code = document.getElementById('checkers-join-input').value.trim();
+  const errEl = document.getElementById('checkers-join-error');
+  if (!/^\d{4}$/.test(code)) { errEl.textContent='กรุณาใส่รหัสห้อง 4 หลัก'; errEl.style.display='block'; return; }
+  errEl.style.display='none';
+  await CheckersOnline.join(code);
+  const btn = document.querySelector('#checkers-join-panel .btn');
+  if(btn){btn.disabled=true;btn.textContent='กำลังเชื่อมต่อ...';}
+  setTimeout(()=>{if(btn){btn.disabled=false;btn.textContent='เข้าร่วม';}},8000);
+}
+
+function cSendChat() {
+  const input=document.getElementById('chat-input-c');
+  const msg=(input?.value||'').trim();
+  if(!msg) return;
+  CheckersOnline.sendChat(msg);
+  input.value='';
+}
+
+function cCopyRoomCode() {
+  const code=CheckersOnline.roomCode; if(!code) return;
+  navigator.clipboard?.writeText(code).catch(()=>{});
+  const btn=document.querySelector('.copy-btn');
+  if(btn){const o=btn.textContent;btn.textContent='คัดลอกแล้ว!';setTimeout(()=>{btn.textContent=o;},2000);}
+}
+
+// keyboard
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape') document.querySelectorAll('.modal-overlay.active').forEach(m=>m.classList.remove('active'));
+});
+</script>
+</html>
