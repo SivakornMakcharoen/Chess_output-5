@@ -148,7 +148,7 @@ const DB = {
         return this.request('players?on_conflict=email', 'POST', {
             email: Security.sanitize(email).toLowerCase(),
             nickname: Security.sanitize(nickname),
-            rating: 500, wins: 0, losses: 0, draws: 0
+            rating: 0, wins: 0, losses: 0, draws: 0
         });
     },
     async getPlayer(email) {
@@ -159,7 +159,7 @@ const DB = {
         if (!Security.rateLimit('update_stats', 5)) return;
         const player = await this.getPlayerById(playerId);
         if (!player) return;
-        const newRating = Math.max(100, Math.min(9999, player.rating + ratingDelta));
+        const newRating = Math.max(0, Math.min(9999, player.rating + ratingDelta));
         const patch = { rating: newRating };
         if (result === 'win') patch.wins = (player.wins || 0) + 1;
         if (result === 'loss') patch.losses = (player.losses || 0) + 1;
@@ -861,31 +861,74 @@ async function showGameOver(status) {
 
     let delta = 0;
     if (APP.gameMode === 'single' && APP.player && APP.gameMode !== 'whiteboard') {
-        const r = result === 'win' ? 1 : result === 'draw' ? 0.5 : 0;
-        delta = Rating.calc(APP.player.rating, botRating, r);
+        // Single player vs AI: +5 for win, 0 for draw/loss
+        if (result === 'win') delta = 5;
         const ratingBefore = APP.player.rating;
-        APP.player.rating = Math.max(100, APP.player.rating + delta);
+        APP.player.rating = Math.max(0, APP.player.rating + delta);
         try {
             await DB.updateStats(APP.player.id, delta, result);
             await DB.logGame({ playerId: APP.player.id, opponent: 'Bot', result, movesCount: chess.moves.length, ratingBefore, ratingAfter: APP.player.rating, mode: 'single' });
         } catch (e) { console.warn('DB update failed:', e); }
         updateMenuUI();
 
-        const el = document.createElement('div');
-        el.className = 'rating-delta';
-        el.textContent = (delta >= 0 ? '+' : '') + delta;
-        el.style.color = delta >= 0 ? 'var(--accent)' : 'var(--danger)';
-        document.body.appendChild(el);
-        setTimeout(() => el.remove(), 2000);
+        if (delta !== 0) {
+            const el = document.createElement('div');
+            el.className = 'rating-delta';
+            el.textContent = (delta >= 0 ? '+' : '') + delta;
+            el.style.color = delta >= 0 ? 'var(--accent)' : 'var(--danger)';
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 2000);
+        }
+    }
+    // Two-player (local) game: +10 for winner
+    if (APP.gameMode === 'two' && result !== 'draw') {
+        const winnerPlayer = result === 'white' ? APP.player : APP.player2;
+        if (winnerPlayer && winnerPlayer.id) {
+            const ratingBefore = winnerPlayer.rating;
+            winnerPlayer.rating = Math.max(0, winnerPlayer.rating + 10);
+            try {
+                await DB.updateStats(winnerPlayer.id, 10, 'win');
+                await DB.logGame({ playerId: winnerPlayer.id, opponent: result === 'white' ? (APP.player2?.nickname || 'P2') : APP.player.nickname, result: 'win', movesCount: chess.moves.length, ratingBefore, ratingAfter: winnerPlayer.rating, mode: 'two' });
+            } catch (e) { console.warn('DB update failed:', e); }
+            updateMenuUI();
+        }
+    }
+    // Custom (online) game: +15 for winner (handled by the winner's client)
+    if (APP.gameMode === 'custom' && APP.player && result !== 'draw') {
+        const myColor = typeof CustomMode !== 'undefined' ? CustomMode.myColor : null;
+        const iWon = (myColor === 'white' && result === 'white') || (myColor === 'black' && result === 'black');
+        if (iWon) {
+            const ratingBefore = APP.player.rating;
+            APP.player.rating = Math.max(0, APP.player.rating + 15);
+            try {
+                await DB.updateStats(APP.player.id, 15, 'win');
+                await DB.logGame({ playerId: APP.player.id, opponent: CustomMode?.opponentName || 'Opponent', result: 'win', movesCount: chess.moves.length, ratingBefore, ratingAfter: APP.player.rating, mode: 'custom' });
+            } catch (e) { console.warn('DB update failed:', e); }
+            updateMenuUI();
+        }
     }
 
     document.getElementById('gameover-icon').textContent = icon;
     document.getElementById('gameover-title').textContent = title;
     document.getElementById('gameover-sub').textContent = sub;
     const rEl = document.getElementById('gameover-rating');
-    if (delta !== 0) {
+    // Show rating info for the current player
+    if (APP.gameMode === 'single' && delta !== 0) {
         rEl.textContent = (delta > 0 ? '+' : '') + delta + ' Rating → ' + APP.player?.rating;
         rEl.style.color = delta > 0 ? 'var(--accent)' : 'var(--danger)';
+    } else if (APP.gameMode === 'two' && result !== 'draw') {
+        const winnerP = result === 'white' ? APP.player : APP.player2;
+        if (winnerP) {
+            rEl.textContent = '+10 Rating → ' + winnerP.rating + ' (' + (winnerP.nickname || '') + ')';
+            rEl.style.color = 'var(--accent)';
+        } else { rEl.textContent = ''; }
+    } else if (APP.gameMode === 'custom' && result !== 'draw') {
+        const myColor = typeof CustomMode !== 'undefined' ? CustomMode.myColor : null;
+        const iWon = myColor && ((myColor === 'white' && result === 'white') || (myColor === 'black' && result === 'black'));
+        if (iWon) {
+            rEl.textContent = '+15 Rating → ' + APP.player?.rating;
+            rEl.style.color = 'var(--accent)';
+        } else { rEl.textContent = ''; }
     } else { rEl.textContent = ''; }
     openModal('gameover-modal');
 }
@@ -952,7 +995,7 @@ async function handleLogin() {
             id: 'local-' + Date.now(),
             email: Security.sanitize(email).toLowerCase(),
             nickname: Security.sanitize(nick),
-            rating: 500, wins: 0, losses: 0, draws: 0
+            rating: 0, wins: 0, losses: 0, draws: 0
         };
         updateMenuUI();
         showPage('page-menu');
@@ -1054,7 +1097,7 @@ async function handleLoginP2() {
             id: 'local2-' + Date.now(),
             email: Security.sanitize(email).toLowerCase(),
             nickname: Security.sanitize(nick),
-            rating: 500, wins: 0, losses: 0, draws: 0
+            rating: 0, wins: 0, losses: 0, draws: 0
         };
     } finally {
         btn.disabled = false; btn.textContent = 'เริ่มเล่น';
@@ -1173,11 +1216,12 @@ function doResign() {
     const loser = chess.turn === 'w' ? 'ขาว' : 'ดำ';
 
     if (APP.gameMode === 'single' && chess.turn === 'w') {
-        // Single player: normal ELO loss + fixed -10 penalty
-        const delta = Rating.calc(APP.player.rating, botRating, 0) - 10;
-        APP.player.rating = Math.max(100, APP.player.rating + delta);
+        // Resign/quit: -20 penalty, floor at 0
+        const ratingBefore = APP.player.rating;
+        const delta = -Math.min(20, APP.player.rating);
+        APP.player.rating = Math.max(0, APP.player.rating - 20);
         DB.updateStats(APP.player.id, delta, 'loss').catch(() => { });
-        DB.logGame({ playerId: APP.player.id, opponent: 'Bot', result: 'resign', movesCount: chess.moves.length, ratingBefore: APP.player.rating - delta, ratingAfter: APP.player.rating, mode: 'single' }).catch(() => { });
+        DB.logGame({ playerId: APP.player.id, opponent: 'Bot', result: 'resign', movesCount: chess.moves.length, ratingBefore, ratingAfter: APP.player.rating, mode: 'single' }).catch(() => { });
         updateMenuUI();
     }
 
@@ -1185,8 +1229,9 @@ function doResign() {
         // Custom: -10 rating penalty for resigner
         if (APP.player) {
             const ratingBefore = APP.player.rating;
-            APP.player.rating = Math.max(100, APP.player.rating - 10);
-            DB.updateStats(APP.player.id, -10, 'loss').catch(() => { });
+            const delta = -Math.min(20, APP.player.rating);
+            APP.player.rating = Math.max(0, APP.player.rating - 20);
+            DB.updateStats(APP.player.id, delta, 'loss').catch(() => { });
             DB.logGame({ playerId: APP.player.id, opponent: CustomMode.opponentName || 'Opponent', result: 'resign', movesCount: chess.moves.length, ratingBefore, ratingAfter: APP.player.rating, mode: 'custom' }).catch(() => { });
         }
         CustomMode.broadcast('resign', {
@@ -1202,8 +1247,9 @@ function doResign() {
         const losingPlayer = chess.turn === 'w' ? APP.player : APP.player2;
         if (losingPlayer && losingPlayer.id) {
             const ratingBefore = losingPlayer.rating;
-            losingPlayer.rating = Math.max(100, losingPlayer.rating - 10);
-            DB.updateStats(losingPlayer.id, -10, 'loss').catch(() => { });
+            const delta = -Math.min(20, losingPlayer.rating);
+            losingPlayer.rating = Math.max(0, losingPlayer.rating - 20);
+            DB.updateStats(losingPlayer.id, delta, 'loss').catch(() => { });
             DB.logGame({ playerId: losingPlayer.id, opponent: chess.turn === 'w' ? (APP.player2?.nickname || 'P2') : APP.player.nickname, result: 'resign', movesCount: chess.moves.length, ratingBefore, ratingAfter: losingPlayer.rating, mode: 'two' }).catch(() => { });
             updateMenuUI();
         }
@@ -1212,7 +1258,7 @@ function doResign() {
     document.getElementById('gameover-icon').textContent = '🏳';
     document.getElementById('gameover-title').textContent = `${loser} ยอมแพ้`;
     document.getElementById('gameover-sub').textContent = 'ขอบคุณสำหรับเกมดีๆ';
-    document.getElementById('gameover-rating').textContent = '-10 Rating';
+    document.getElementById('gameover-rating').textContent = '-20 Rating';
     document.getElementById('gameover-rating').style.color = 'var(--danger)';
     openModal('gameover-modal');
 }
@@ -1246,7 +1292,8 @@ async function showRanking() {
         { label: 'Platinum 🔷', min: 1401, max: 1800, class: 'tier-platinum' },
         { label: 'Gold 🥇', min: 1001, max: 1400, class: 'tier-gold' },
         { label: 'Silver 🥈', min: 501, max: 1000, class: 'tier-silver' },
-        { label: 'Bronze 🥉', min: 100, max: 500, class: 'tier-bronze' }
+        { label: 'Bronze 🥉', min: 100, max: 500, class: 'tier-bronze' },
+        { label: 'Unranked ⚪', min: 0, max: 99, class: 'tier-unranked' }
     ];
 
     let html = ''; let rank = 1;
