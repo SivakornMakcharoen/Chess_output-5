@@ -1219,7 +1219,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .sq.last-move{background:rgba(254,248,121,.7)!important}
 
 /* ---- pieces ---- */
-.piece{width:78%;height:78%;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;box-shadow:0 3px 8px rgba(0,0,0,.5);position:relative;transition:transform .12s}
+/* .piece{width:78%;height:78%;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;box-shadow:0 3px 8px rgba(0,0,0,.5);position:relative;transition:transform .12s} */
 .piece.white-piece{background:radial-gradient(circle at 35% 35%,#fff 0%,#d4d4d4 70%,#aaa 100%);color:#555;border:2px solid #bbb}
 .piece.black-piece{background:radial-gradient(circle at 35% 35%,#6b6b6b 0%,#2d2d2d 70%,#111 100%);color:#eee;border:2px solid #555}
 .piece.king::after{content:'♛';position:absolute;font-size:14px;top:50%;left:50%;transform:translate(-50%,-54%);pointer-events:none}
